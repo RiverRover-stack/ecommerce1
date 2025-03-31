@@ -1,17 +1,46 @@
-// Fetch products from API
+// Product management
 let products = [];
 
 async function fetchProducts() {
+    const container = document.getElementById('products-container');
+    container.innerHTML = '<div class="text-center py-12"><i class="fas fa-spinner fa-spin text-2xl text-green-500"></i></div>';
+
     try {
         const response = await fetch('http://localhost:3000/api/products');
-        if (!response.ok) throw new Error('Failed to fetch products');
-        products = await response.json();
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        // Get unique products by both ID and name
+        const fetchedProducts = await response.json();
+        const productMap = new Map();
+        
+        fetchedProducts.forEach(product => {
+            const key = `${product.id}-${product.name}`;
+            if (!productMap.has(key)) {
+                productMap.set(key, {
+                    ...product,
+                    image: product.image_url || product.image
+                });
+            }
+        });
+        
+        products = Array.from(productMap.values());
+        
+        if (products.length === 0) {
+            container.innerHTML = '<p class="text-center py-12 text-gray-500">No products available at this time</p>';
+            return;
+        }
+        
         displayProducts();
     } catch (error) {
         console.error('Error fetching products:', error);
-        // Fallback to empty array if API fails
-        products = [];
-        displayProducts();
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <p class="text-red-500 mb-2">Failed to load products</p>
+                <button onclick="fetchProducts()" class="text-green-500 hover:underline">
+                    <i class="fas fa-sync-alt mr-1"></i> Try Again
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -38,24 +67,40 @@ updateCartCount();
 // DOM elements
 const productsContainer = document.getElementById('products-container');
 
-// Display products
+// Display products with enhanced UI
 function displayProducts() {
-    productsContainer.innerHTML = '';
-    
+    const container = document.getElementById('products-container');
+    container.innerHTML = '';
+
     products.forEach(product => {
-        const productCard = document.createElement('div');
-        productCard.className = 'bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition duration-300';
-        productCard.innerHTML = `
-            <img src="${product.image}" alt="${product.name}" class="w-full h-48 object-cover">
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300';
+        card.innerHTML = `
+            <div class="relative">
+                <img src="${product.image_url || product.image}" alt="${product.name}" 
+                    class="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
+                    onerror="this.src='https://via.placeholder.com/300?text=Product+Image'">
+                ${product.stock < 5 ? `
+                    <span class="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        Low Stock
+                    </span>
+                ` : ''}
+            </div>
             <div class="p-4">
-                <h3 class="font-semibold text-lg mb-2">${product.name}</h3>
-                <p class="text-gray-600 mb-2">$${product.price.toFixed(2)}</p>
-                <button onclick="addToCart(${product.id})" class="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600 transition duration-300">
-                    Add to Cart
+                <h3 class="font-bold text-lg mb-2 truncate">${product.name}</h3>
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-green-600 font-bold">$${product.price.toFixed(2)}</span>
+                    <span class="text-xs text-gray-500">${product.stock} available</span>
+                </div>
+                <button onclick="addToCart(${product.id})" 
+                    class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors duration-300
+                    ${product.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
+                    ${product.stock === 0 ? 'disabled' : ''}>
+                    ${product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
                 </button>
             </div>
         `;
-        productsContainer.appendChild(productCard);
+        container.appendChild(card);
     });
 }
 
@@ -87,7 +132,51 @@ function showToast(message) {
     }, 3000);
 }
 
+// Check authentication status
+function checkAuthStatus() {
+    const authStatus = document.getElementById('authStatus');
+    if (!authStatus) return;
+
+    const token = localStorage.getItem('authToken');
+    const username = localStorage.getItem('username');
+
+    if (token && username) {
+        authStatus.innerHTML = `
+            <span class="text-gray-600">Welcome, ${username}</span>
+            <button onclick="logout()" class="py-2 px-2 font-medium text-gray-500 rounded hover:bg-green-500 hover:text-white transition duration-300">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        `;
+    }
+}
+
+// Logout function
+function logout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    window.location.href = 'index.html';
+}
+
+// Smooth scrolling for all anchor links
+function initSmoothScrolling() {
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+    });
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', () => {
     fetchProducts();
+    checkAuthStatus();
+    initSmoothScrolling();
 });
