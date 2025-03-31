@@ -51,8 +51,8 @@ function updateOrderTotals() {
 
 // Process payment
 async function processPayment() {
-    if (cart.length === 0) {
-        showToast('Your cart is empty');
+    if (orderItems.length === 0) {
+        showToast('No items selected');
         return;
     }
 
