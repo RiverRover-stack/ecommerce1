@@ -1,6 +1,8 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const path = require('path');
 
 const app = express();
@@ -12,7 +14,9 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Database setup
-const db = new sqlite3.Database('./backend/db/shoe_store.db', (err) => {
+const dbPath = '/project/sandbox/user-workspace/backend/db/shoe_store.db';
+const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+    console.log(`Using database at: ${dbPath}`);
     if (err) {
         console.error('Error opening database:', err.message);
     } else {
@@ -44,14 +48,30 @@ db.serialize(() => {
 });
 
 // API Endpoints
+// Get all available products
 app.get('/api/products', (req, res) => {
-    db.all('SELECT * FROM products', [], (err, rows) => {
+    db.all('SELECT id, name, price, image_url as image, stock FROM products WHERE stock > 0', [], (err, products) => {
         if (err) {
-            res.status(500).json({ error: err.message });
-            return;
+            console.error('Database error:', err);
+            return res.status(500).json({ error: 'Failed to fetch products' });
         }
-        res.json(rows);
+        res.json(products);
     });
+});
+
+// Get product details
+app.get('/api/products/:id', (req, res) => {
+    db.get('SELECT id, name, price, image_url as image, stock FROM products WHERE id = ?', 
+        [req.params.id], (err, product) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Failed to fetch product' });
+            }
+            if (!product) {
+                return res.status(404).json({ error: 'Product not found' });
+            }
+            res.json(product);
+        });
 });
 
 app.post('/api/cart', (req, res) => {
@@ -66,6 +86,129 @@ app.post('/api/cart', (req, res) => {
             return;
         }
         res.json(row);
+    });
+});
+
+// User registration endpoint
+app.post('/api/signup', express.json(), async (req, res) => {
+    const { username, email, password } = req.body;
+    
+    try {
+        // Validate input
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: 'All fields are required' });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Insert user
+        db.run(
+            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+            [username, email, hashedPassword],
+            function(err) {
+                if (err) {
+                    if (err.message.includes('UNIQUE constraint failed')) {
+                        return res.status(400).json({ error: 'Username or email already exists' });
+                    }
+                    throw err;
+                }
+                res.status(201).json({ message: 'User created successfully' });
+            }
+        );
+    } catch (err) {
+        console.error('Signup error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// User login endpoint
+app.post('/api/login', express.json(), async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        // Find user
+        db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+            if (err) throw err;
+            if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+            // Verify password
+            const validPassword = await bcrypt.compare(password, user.password_hash);
+            if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+
+            // Create JWT token
+            const token = jwt.sign(
+                { userId: user.id, email: user.email },
+                process.env.JWT_SECRET || 'your-secret-key',
+                { expiresIn: '1h' }
+            );
+
+            // Store session
+            const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+            db.run(
+                'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)',
+                [user.id, token, expiresAt.toISOString()]
+            );
+
+            res.json({ token, userId: user.id, username: user.username });
+        });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get user orders
+app.get('/api/orders', (req, res) => {
+    const userId = req.query.userId;
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+        jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    db.all(`
+        SELECT t.id, t.total, t.transaction_date, 
+               p.name, p.price, p.image_url, 
+               ti.quantity
+        FROM transactions t
+        JOIN transaction_items ti ON t.id = ti.transaction_id
+        JOIN products p ON ti.product_id = p.id
+        WHERE t.customer_email IN (
+            SELECT email FROM users WHERE id = ?
+        )
+        ORDER BY t.transaction_date DESC
+    `, [userId], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        // Group items by order
+        const orders = {};
+        rows.forEach(row => {
+            if (!orders[row.id]) {
+                orders[row.id] = {
+                    id: row.id,
+                    total: row.total,
+                    transaction_date: row.transaction_date,
+                    items: []
+                };
+            }
+            orders[row.id].items.push({
+                name: row.name,
+                price: row.price,
+                image_url: row.image_url,
+                quantity: row.quantity
+            });
+        });
+
+        res.json(Object.values(orders));
     });
 });
 
@@ -92,6 +235,6 @@ app.post('/api/checkout', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
