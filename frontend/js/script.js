@@ -37,6 +37,23 @@ const products = [
 // Cart functionality
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
 
+// Update cart count display
+function updateCartCount() {
+    const countElement = document.getElementById('cart-count');
+    if (countElement) {
+        const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+        if (totalItems > 0) {
+            countElement.textContent = totalItems;
+            countElement.classList.remove('hidden');
+        } else {
+            countElement.classList.add('hidden');
+        }
+    }
+}
+
+// Initialize cart count
+updateCartCount();
+
 // DOM elements
 const productsContainer = document.getElementById('products-container');
 
@@ -73,6 +90,7 @@ function addToCart(productId) {
     }
     
     localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
     showToast(`${product.name} added to cart`);
 }
 
