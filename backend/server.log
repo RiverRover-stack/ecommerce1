@@ -1,0 +1,4 @@
+nohup: ignoring input
+Server running on http://localhost:3000
+Using database at: /project/sandbox/user-workspace/backend/db/shoe_store.db
+Connected to the SQLite database.
