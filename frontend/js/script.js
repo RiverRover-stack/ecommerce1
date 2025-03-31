@@ -1,38 +1,19 @@
-// Sample product data (will be replaced with API calls later)
-const products = [
-    {
-        id: 1,
-        name: "Classic White Sneakers",
-        price: 89.99,
-        description: "Timeless white sneakers for everyday wear",
-        image: "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg",
-        category: "sneakers"
-    },
-    {
-        id: 2,
-        name: "Leather Oxford Shoes",
-        price: 129.99,
-        description: "Premium leather oxfords for formal occasions",
-        image: "https://images.pexels.com/photos/19090/pexels-photo.jpg",
-        category: "formal"
-    },
-    {
-        id: 3,
-        name: "Running Shoes",
-        price: 109.99,
-        description: "High-performance running shoes with cushioning",
-        image: "https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg",
-        category: "sports"
-    },
-    {
-        id: 4,
-        name: "Canvas Slip-ons",
-        price: 49.99,
-        description: "Comfortable casual slip-on shoes",
-        image: "https://images.pexels.com/photos/267301/pexels-photo-267301.jpeg",
-        category: "casual"
+// Fetch products from API
+let products = [];
+
+async function fetchProducts() {
+    try {
+        const response = await fetch('http://localhost:3000/api/products');
+        if (!response.ok) throw new Error('Failed to fetch products');
+        products = await response.json();
+        displayProducts();
+    } catch (error) {
+        console.error('Error fetching products:', error);
+        // Fallback to empty array if API fails
+        products = [];
+        displayProducts();
     }
-];
+}
 
 // Cart functionality
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
@@ -108,5 +89,5 @@ function showToast(message) {
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', () => {
-    displayProducts();
+    fetchProducts();
 });
