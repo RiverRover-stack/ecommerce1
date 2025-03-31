@@ -67,31 +67,62 @@ updateCartCount();
 // DOM elements
 const productsContainer = document.getElementById('products-container');
 
-// Display products with enhanced UI
+// Display products with all database fields
 function displayProducts() {
     const container = document.getElementById('products-container');
     container.innerHTML = '';
 
     products.forEach(product => {
         const card = document.createElement('div');
-        card.className = 'bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300';
+        card.className = `bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 ${
+            product.featured ? 'ring-2 ring-green-500' : ''
+        }`;
+        
         card.innerHTML = `
             <div class="relative">
                 <img src="${product.image_url || product.image}" alt="${product.name}" 
                     class="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
                     onerror="this.src='https://via.placeholder.com/300?text=Product+Image'">
+                
+                ${product.featured ? `
+                    <span class="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                        Featured
+                    </span>
+                ` : ''}
+                
                 ${product.stock < 5 ? `
                     <span class="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                        Low Stock
+                        ${product.stock === 0 ? 'Sold Out' : 'Low Stock'}
                     </span>
                 ` : ''}
             </div>
+            
             <div class="p-4">
-                <h3 class="font-bold text-lg mb-2 truncate">${product.name}</h3>
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="font-bold text-lg truncate">${product.name}</h3>
+                    ${product.rating ? `
+                        <span class="flex items-center text-sm text-yellow-500">
+                            <i class="fas fa-star mr-1"></i>
+                            ${product.rating.toFixed(1)}
+                        </span>
+                    ` : ''}
+                </div>
+                
+                ${product.description ? `
+                    <p class="text-gray-600 text-sm mb-3">${product.description}</p>
+                ` : ''}
+                
+                ${product.category ? `
+                    <span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full mb-3">
+                        ${product.category}
+                    </span>
+                ` : ''}
+                
                 <div class="flex justify-between items-center mb-3">
                     <span class="text-green-600 font-bold">$${product.price.toFixed(2)}</span>
-                    <span class="text-xs text-gray-500">${product.stock} available</span>
+                    <span class="text-xs text-gray-500">${product.stock} in stock</span>
                 </div>
+                
                 <button onclick="addToCart(${product.id})" 
                     class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors duration-300
                     ${product.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
