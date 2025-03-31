@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Orders - ShoeStore</title>
+    <title>My Orders - ShoeStore</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -11,10 +11,17 @@
         body {
             font-family: 'Poppins', sans-serif;
         }
+        .order-card {
+            transition: all 0.3s ease;
+        }
+        .order-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Navbar (same as index.html) -->
+    <!-- Navbar -->
     <nav class="bg-white shadow-lg">
         <div class="max-w-6xl mx-auto px-4">
             <div class="flex justify-between">
@@ -32,11 +39,13 @@
                     </div>
                 </div>
                 <div class="hidden md:flex items-center space-x-3">
-                    <a href="#" class="py-2 px-2 font-medium text-gray-500 rounded hover:bg-green-500 hover:text-white transition duration-300">
-                        <i class="fas fa-user"></i>
-                    </a>
+                    <div id="authStatus" class="flex items-center space-x-3">
+                        <a href="login.html" class="py-2 px-2 font-medium text-gray-500 rounded hover:bg-green-500 hover:text-white transition duration-300">
+                            <i class="fas fa-user"></i> Login
+                        </a>
+                    </div>
                     <a href="orders.html" class="py-2 px-2 font-medium text-gray-500 rounded hover:bg-green-500 hover:text-white transition duration-300">
-                        <i class="fas fa-shopping-cart"></i>
+                        <i class="fas fa-clipboard-list"></i> Orders
                     </a>
                 </div>
             </div>
@@ -45,27 +54,101 @@
 
     <!-- Orders Section -->
     <section class="max-w-6xl mx-auto px-4 py-12">
-        <h2 class="text-3xl font-bold mb-8">Your Orders</h2>
+        <h1 class="text-3xl font-bold mb-8">My Orders</h1>
         
-        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <div id="order-items" class="divide-y divide-gray-200">
-                <!-- Order items will be loaded dynamically -->
-            </div>
-            
-            <div class="mt-8 border-t pt-6">
-                <div class="flex justify-between items-center">
-                    <span class="text-xl font-semibold">Total:</span>
-                    <span id="order-total" class="text-xl font-bold">$0.00</span>
-                </div>
-                <div class="mt-6 flex justify-end">
-                    <button onclick="checkout()" class="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition duration-300">
-                        Place Order
-                    </button>
-                </div>
+        <div id="orders-container" class="space-y-6">
+            <!-- Orders will be loaded here dynamically -->
+            <div class="text-center py-12">
+                <p class="text-gray-500">Loading your orders...</p>
             </div>
         </div>
     </section>
 
-    <script src="js/orders.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const userId = localStorage.getItem('userId');
+            const authToken = localStorage.getItem('authToken');
+            
+            if (!userId || !authToken) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/orders?userId=${userId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch orders');
+                }
+
+                const orders = await response.json();
+                displayOrders(orders);
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+                document.getElementById('orders-container').innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <p>Error loading orders. Please try again later.</p>
+                    </div>
+                `;
+            }
+        });
+
+        function displayOrders(orders) {
+            const container = document.getElementById('orders-container');
+            
+            if (orders.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <p class="text-gray-500">You haven't placed any orders yet.</p>
+                        <a href="index.html#products" class="mt-4 inline-block bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition duration-300">
+                            Start Shopping
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = orders.map(order => `
+                <div class="order-card bg-white rounded-lg shadow-md p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-semibold">Order #${order.id}</h3>
+                            <p class="text-gray-500">Placed on ${new Date(order.transaction_date).toLocaleDateString()}</p>
+                        </div>
+                        <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                            ${order.status || 'Completed'}
+                        </span>
+                    </div>
+                    
+                    <div class="border-t border-gray-200 pt-4">
+                        ${order.items.map(item => `
+                            <div class="flex mb-4">
+                                <div class="w-20 h-20 bg-gray-200 rounded-md overflow-hidden">
+                                    <img src="${item.image_url}" alt="${item.name}" class="w-full h-full object-cover">
+                                </div>
+                                <div class="ml-4">
+                                    <h4 class="font-medium">${item.name}</h4>
+                                    <p class="text-gray-600">$${item.price} x ${item.quantity}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="border-t border-gray-200 pt-4 flex justify-between items-center">
+                        <div>
+                            <p class="text-gray-600">Total: <span class="font-semibold">$${order.total}</span></p>
+                        </div>
+                        <button class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition duration-300">
+                            Track Order
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
 </body>
 </html>
