@@ -14,8 +14,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Database setup
-const dbPath = '/project/sandbox/user-workspace/backend/db/shoe_store.db';
-const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+const dbPath = path.join(__dirname, 'db/shoe_store.db');
+const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX, (err) => {
     console.log(`Using database at: ${dbPath}`);
     if (err) {
         console.error('Error opening database:', err.message);
@@ -50,7 +50,7 @@ db.serialize(() => {
 // API Endpoints
 // Get all available products
 app.get('/api/products', (req, res) => {
-    db.all('SELECT id, name, price, image_url as image, stock FROM products WHERE stock > 0', [], (err, products) => {
+    db.all('SELECT id, name, price, image_url, stock, description, category, rating, featured FROM products WHERE stock > 0', [], (err, products) => {
         if (err) {
             console.error('Database error:', err);
             return res.status(500).json({ error: 'Failed to fetch products' });
@@ -123,23 +123,42 @@ app.post('/api/signup', express.json(), async (req, res) => {
 });
 
 // User login endpoint
+// Configure JWT
+const JWT_SECRET = process.env.JWT_SECRET || 'your-consistent-secret-key-here';
+
 app.post('/api/login', express.json(), async (req, res) => {
     const { email, password } = req.body;
+    
+    // Input validation
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
 
     try {
         // Find user
         db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-            if (err) throw err;
-            if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+            
+            if (!user) {
+                return res.status(401).json({ error: 'Invalid email or password' });
+            }
 
             // Verify password
             const validPassword = await bcrypt.compare(password, user.password_hash);
-            if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+            if (!validPassword) {
+                return res.status(401).json({ error: 'Invalid email or password' });
+            }
 
             // Create JWT token
             const token = jwt.sign(
-                { userId: user.id, email: user.email },
-                process.env.JWT_SECRET || 'your-secret-key',
+                { 
+                    userId: user.id, 
+                    email: user.email 
+                },
+                JWT_SECRET,
                 { expiresIn: '1h' }
             );
 
@@ -147,10 +166,22 @@ app.post('/api/login', express.json(), async (req, res) => {
             const expiresAt = new Date(Date.now() + 3600000); // 1 hour
             db.run(
                 'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)',
-                [user.id, token, expiresAt.toISOString()]
+                [user.id, token, expiresAt.toISOString()],
+                function(err) {
+                    if (err) {
+                        console.error('Session error:', err);
+                        return res.status(500).json({ error: 'Could not create session' });
+                    }
+                    
+                    res.json({ 
+                        success: true,
+                        token,
+                        userId: user.id,
+                        email: user.email,
+                        expiresAt: expiresAt.toISOString()
+                    });
+                }
             );
-
-            res.json({ token, userId: user.id, username: user.username });
         });
     } catch (err) {
         console.error('Login error:', err);
