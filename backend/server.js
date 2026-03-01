@@ -4,6 +4,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const ariaPersona = require('./aria-persona');
 
 const app = express();
 const PORT = 3000;
@@ -262,6 +263,49 @@ app.post('/api/checkout', (req, res) => {
             return;
         }
         res.json({ success: true, message: 'Order placed successfully' });
+    });
+});
+
+// Aria chat endpoint
+const ARIA_RULES = [
+    { pattern: /\b(hi|hello|hey|good morning|good afternoon|good evening)\b/, key: 'greeting' },
+    { pattern: /\b(ship|shipping|delivery|deliver)\b/, key: 'shipping' },
+    { pattern: /\b(return|refund|exchange)\b/, key: 'returns' },
+    { pattern: /\b(size|sizing|fit|measurement)\b/, key: 'sizing' },
+    { pattern: /\b(pay|payment|card|credit|debit|paypal)\b/, key: 'payment' },
+    { pattern: /\b(discount|coupon|promo|sale|offer)\b/, key: 'discount' },
+    { pattern: /\b(contact|email|support|help|human|agent)\b/, key: 'contact' },
+    { pattern: /\b(products?|shoes?|boots?|sneakers?|sandals?|collection|browse)\b/, key: 'products' }
+];
+
+function pickResponse(responses) {
+    if (!responses || responses.length === 0) return null;
+    return responses[Math.floor(Math.random() * responses.length)];
+}
+
+app.post('/api/chat', (req, res) => {
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const lower = message.toLowerCase();
+    let reply;
+
+    const matched = ARIA_RULES.find(rule => rule.pattern.test(lower));
+    if (matched) {
+        reply = pickResponse(ariaPersona.responses[matched.key]);
+    }
+
+    if (!reply) {
+        reply = pickResponse(ariaPersona.responses.default) ||
+            "I'm here to help! Please visit our Contact page for further assistance.";
+    }
+
+    res.json({
+        agent: ariaPersona.name,
+        message: reply
     });
 });
 
